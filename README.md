@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 <div align="center">
 
 # 🤖 Profesyonel Ağı ve AI Profil Chatbot — Yeni Nesil Kariyer Platformu
