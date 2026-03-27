@@ -149,7 +149,7 @@ graph TD
     
     %% API -> Servisler
     API_Gateway --> CV_Engine
-    API_Gateway --> Rap_Engine & Quiz_Engine & Chat_Engine
+    API_Gateway --> Rag_Engine & Quiz_Engine & Chat_Engine
     
     %% Backend İçi İlişkiler
     CV_Engine --> |Vektör ID'leri| ChromaDB
