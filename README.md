@@ -138,7 +138,7 @@ graph TD
 
     %% AI ve Depolama Katmanı
     subgraph Data_AI["🗂️ Veritabanı & Model Katmanı"]
-        Ollama[🤖 LLM (OpenAI - Ollama)]
+        Ollama["🤖 LLM (OpenAI / Ollama)"]
         ChromaDB[(📊 ChromaDB\nVektör Veritabanı)]
         SQLite[(🗄️ SQLite\nİlişkisel Veriler)]
     end
