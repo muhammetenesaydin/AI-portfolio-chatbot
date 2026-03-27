@@ -466,7 +466,3 @@ Yapımcı: **Enes** | 2026
 | WP12 | Mobil arayüzlerin Testi | uygulamanın backend endpointleri ile haberleşip haberleşmediğini kontrol etmek  | Proje testleri.|
 | WP13 | Model testleri | Cv botunun hem mobil arayüzleride hem de web arayüzlerinde çalışıp çalışmadığını kontrol etme. | Proje Testleri. |
 | WP14 | Dökümantasyon | Projenin dökümantasyonunun oluşturulması. | Proje dökümanı |
-
-
-
->>>>>>> 4f05d0e75eda24abf98779fdcbabb85ebde816b5
