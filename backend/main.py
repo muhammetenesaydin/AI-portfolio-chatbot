@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import candidates, upload, chat
 import os
 from config import settings
+from database import engine, Base
+
+# DB Tables
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="AI Profil Chatbot API",
@@ -22,11 +26,6 @@ app.add_middleware(
 # Klasörlerin oluşturulması
 os.makedirs(settings.upload_dir, exist_ok=True)
 os.makedirs(settings.chroma_db_dir, exist_ok=True)
-
-# SQL dbs directory logic
-db_path = settings.database_url.replace("sqlite:///", "")
-if db_path.startswith("./"):
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
 # Router'ların eklenmesi
 app.include_router(candidates.router)
