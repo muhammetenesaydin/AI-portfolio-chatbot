@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import candidates, upload, chat
+from routers import candidates, upload, chat, auth, messages
 import os
 from config import settings
 from database import engine, Base
@@ -25,12 +25,14 @@ app.add_middleware(
 
 # Klasörlerin oluşturulması
 os.makedirs(settings.upload_dir, exist_ok=True)
-os.makedirs(settings.chroma_db_dir, exist_ok=True)
+os.makedirs(settings.db_dir, exist_ok=True)
 
 # Router'ların eklenmesi
 app.include_router(candidates.router)
 app.include_router(upload.router)
 app.include_router(chat.router)
+app.include_router(auth.router)
+app.include_router(messages.router)
 
 @app.get("/")
 def read_root():

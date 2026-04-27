@@ -27,6 +27,13 @@ class QuizEngine:
                 api_key=settings.openai_api_key,
                 temperature=0.3
             )
+        elif settings.llm_provider == "gemini":
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-flash-latest",
+                google_api_key=settings.google_api_key,
+                temperature=0.3
+            )
         else:
             # Ollama fallback fallback
             from langchain_community.chat_models import ChatOllama
@@ -52,29 +59,62 @@ class QuizEngine:
             return CandidateExtraction(name="Bilinmiyor", skills=["Belirtilmemiş"], experience_years=0)
 
     def generate_quiz_from_text(self, raw_text: str, skills: List[str]) -> dict:
-        """CV metni ve yeteneklerden teknik sınav (quiz) oluşturur."""
-        prompt = PromptTemplate.from_template(
-            "Aşağıdaki özgeçmiş metninde yer alan tecrübe ve yeteneklere ({skills}) göre adayı test edecek "
-            "teknik ve davranışsal çoktan seçmeli 5 adet zorlu mülakat sorusu oluştur.\n\n"
-            "Özgeçmiş Özeti:\n{raw_text}\n\n"
-            "Lütfen her soru için 'question', 4 seçenekli 'options' ve doğru cevabı içeren 'correct' formatını döndür."
-        )
-        
-        chain = prompt | self.llm.with_structured_output(QuizResult)
-        
+        """README vizyonuna uygun: CV metni ve projelerden ZORLU teknik sınav oluşturur."""
         try:
+            prompt = PromptTemplate.from_template(
+                "Sen uzman bir teknik mülakatçısın. Aşağıdaki özgeçmişi analiz et ve adayın belirttiği "
+                "projeleri, teknik yetkinlikleri ({skills}) ve iş deneyimini gerçekten doğrulayacak "
+                "5 adet ZORLU ve ÖZGÜN çoktan seçmeli soru hazırla.\n\n"
+                "KURALLAR:\n"
+                "1. Sorular sadece teorik değil, adayın CV'sindeki spesifik deneyimlere dokunmalı.\n"
+                "2. 'Hangisi doğrudur?' gibi basit sorular yerine senaryo bazlı sorular sor.\n"
+                "3. Teknik yetkinliği (Hard Skills) ve projedeki rolünü sorgula.\n"
+                "4. Dil her zaman profesyonel TÜRKÇE olmalı.\n\n"
+                "ÖZGEÇMİŞ METNİ:\n{raw_text}\n\n"
+                "Lütfen her soru için JSON formatında 'question', 4 seçenekli 'options' ve 'correct' döndür."
+            )
+            
+            chain = prompt | self.llm.with_structured_output(QuizResult)
             result = chain.invoke({"raw_text": raw_text[:4000], "skills": ", ".join(skills)})
             return result.dict()
         except Exception as e:
-            print(f"Quiz oluşturma hatası: {e}")
+            print(f"ERROR: AI Sınav Üretme Hatası: {e}")
+            return {"questions": []}
+
+    async def generate_quiz(self, raw_text: str) -> dict:
+        """Yönlendiricinin beklediği ana metod. Soruları ve doğru cevapları ayrıştırır."""
+        res = self.generate_quiz_from_text(raw_text, ["Genel Yazılım"])
+        
+        questions = []
+        correct_answers = []
+        
+        # Eğer AI kota hatası vb. nedeniyle boş döndüyse yedek soru ekle
+        if not res.get("questions"):
             return {
-                "questions": [
-                    {
-                        "question": "Sistem API hatası nedeniyle quiz oluşturulamadı. (OpenAI API anahtarınızı kontrol edin)",
-                        "options": ["Tamam", "Tekrar Dene", "Atla", "Kapat"],
-                        "correct": "Tamam"
-                    }
-                ]
+                "questions": [{
+                    "question_text": "⚠️ Yapay zeka servis kotası dolduğu için şu an özel sınav oluşturulamıyor. Lütfen 1 dakika sonra tekrar deneyin.",
+                    "options": ["Anladım, bekleyeceğim", "Tekrar Dene", "İptal", "Devam Et"]
+                }],
+                "correct_answers": [0]
             }
+        
+        for q in res.get("questions", []):
+            if not q.get("question") or not q.get("options"):
+                continue
+            questions.append({
+                "question_text": q.get("question"),
+                "options": q.get("options")
+            })
+            correct_text = q.get("correct")
+            try:
+                idx = q.get("options").index(correct_text)
+            except:
+                idx = 0
+            correct_answers.append(idx)
+            
+        return {
+            "questions": questions,
+            "correct_answers": correct_answers
+        }
 
 quiz_engine = QuizEngine()
