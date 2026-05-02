@@ -61,22 +61,28 @@
         <main class="main-content">
             <!-- Sınav Sekmesi -->
             <div id="devQuizView">
-                <div class="section-title">
+                <div class="section-title" style="margin-bottom: 24px;">
                     <h1>Hoş Geldin, <span id="devWelcomeName">Aday</span></h1>
-                    <p>CV'ni yükle, AI sana özel teknik bir sınav hazırlasın.</p>
+                    <p style="color: var(--text-muted); margin-top: 4px;">Platforma CV'ni yükle ve AI destekli beceri doğrulamasına katıl.</p>
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 30px; margin-top: 30px;">
-                    <div class="candidate-card" style="padding: 30px; height: fit-content;">
-                        <h3 style="margin-bottom: 15px;">Yeni Sınav Başlat</h3>
-                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">CV'ni yükle, AI senin için teknik bir quiz hazırlasın.</p>
-                        <div class="upload-zone" id="uploadBtn" style="height: 180px; border-radius: 20px;">
-                            <div class="upload-icon" style="font-size: 2.5rem;">📤</div>
-                            <span>CV Seç</span>
+                
+                <div class="candidate-grid-layout">
+                    <!-- CV Upload Card -->
+                    <div class="candidate-card upload-card">
+                        <h3 style="margin-bottom: 10px;">Yeni Sınav Başlat</h3>
+                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">AI destekli teknik bir test oluşturmak için güncel CV'ni PDF veya DOCX formatında yükle.</p>
+                        <div class="upload-zone" id="uploadBtn">
+                            <div class="upload-icon" style="font-size: 2.2rem; margin-bottom: 10px;">📄</div>
+                            <span style="font-weight: 600;">CV Seç ve Yükle</span>
                         </div>
                     </div>
-                    <div>
-                        <h3 style="margin-bottom: 20px;">Sınav Geçmişim</h3>
-                        <div id="myQuizHistory" class="candidates-grid" style="grid-template-columns: 1fr; gap: 15px;"></div>
+                    
+                    <!-- Score Card -->
+                    <div class="score-card-section">
+                        <h3 style="margin-bottom: 15px;">Sınav Geçmişim</h3>
+                        <div id="myQuizHistory" class="candidates-grid" style="grid-template-columns: 1fr; gap: 15px;">
+                            <!-- JS will populate -->
+                        </div>
                     </div>
                 </div>
             </div>

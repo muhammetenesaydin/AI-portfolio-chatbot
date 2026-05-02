@@ -3,13 +3,22 @@ import {
   StyleSheet, Text, View, TextInput, TouchableOpacity,
   ScrollView, Alert, FlatList, ActivityIndicator, StatusBar, KeyboardAvoidingView, Platform
 } from 'react-native';
-import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 
 const API_BASE = 'http://10.192.167.134:8000/api';
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainApp />
+    </SafeAreaProvider>
+  );
+}
+
+function MainApp() {
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -29,7 +38,26 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [msgInput, setMsgInput] = useState('');
   
-  const chatInterval = useRef(null);
+  // ─── SÜREKLİ KONTROL (POLLING) MEKANİZMASI ─────────────────────────────────
+  useEffect(() => {
+    let interval = null;
+    
+    if (currentScreen === 'chat_room' && chatPartner) {
+      // Sohbet açıkken 2 saniyede bir yeni mesajları kontrol et
+      interval = setInterval(() => {
+        loadMessages(chatPartner.id);
+      }, 2000);
+    } else if (currentScreen === 'chats' && user) {
+      // Sohbet listesindeyken 3 saniyede bir aktif sohbetleri yenile
+      interval = setInterval(() => {
+        fetchActiveChats();
+      }, 3000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [currentScreen, chatPartner, user]);
 
   // ─── AUTH ──────────────────────────────────────────────────────────────────
   const handleAuth = async () => {
@@ -103,17 +131,22 @@ export default function App() {
   // ─── MESAJLAŞMA FONKSİYONLARI ──────────────────────────────────────────────
   const fetchActiveChats = async () => {
     try {
-      const res = await fetch(`${API_BASE}/messages/active-chats/${user.id}`);
+      const res = await fetch(`${API_BASE}/messages/active-chats/${user.id}?t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      });
       if (!res.ok) return;
       const data = await res.json();
       setActiveChats(data);
     } catch (e) { console.error('Sohbetler yüklenemedi:', e); }
   };
 
-  const loadMessages = async () => {
-    if (!chatPartner || !user) return;
+  const loadMessages = async (explicitPartnerId) => {
+    const pId = explicitPartnerId || chatPartner?.id;
+    if (!pId || !user) return;
     try {
-      const res = await fetch(`${API_BASE}/messages/history/${user.id}/${chatPartner.id}`);
+      const res = await fetch(`${API_BASE}/messages/history/${user.id}/${pId}?t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+      });
       if (!res.ok) return;
       const data = await res.json();
       setMessages(data);
@@ -145,13 +178,10 @@ export default function App() {
   const openChatRoom = (partnerId, partnerName) => {
     setChatPartner({ id: partnerId, name: partnerName });
     setCurrentScreen('chat_room');
-    loadMessages();
-    if (chatInterval.current) clearInterval(chatInterval.current);
-    chatInterval.current = setInterval(loadMessages, 3000);
+    loadMessages(partnerId);
   };
 
   const goHome = () => {
-    if (chatInterval.current) clearInterval(chatInterval.current);
     setCurrentScreen('home');
     setChatPartner(null);
   };
@@ -160,34 +190,33 @@ export default function App() {
   
   if (!user) {
     return (
-      <SafeAreaProvider>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <StatusBar barStyle="light-content" backgroundColor="#222831" />
-        <SafeAreaView style={styles.container}>
-          <ScrollView contentContainerStyle={styles.loginContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.logo}>🤖 AI Talent Hub</Text>
-            <Text style={styles.subtitle}>{isLogin ? 'Yeteneklerle Buluş' : 'Yeni Profil Oluştur'}</Text>
-            <TextInput style={styles.input} placeholder="E-posta" placeholderTextColor="#adb5bd" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
-            <TextInput style={styles.input} placeholder="Şifre" placeholderTextColor="#adb5bd" value={password} onChangeText={setPassword} secureTextEntry />
-            <TouchableOpacity style={styles.primaryBtn} onPress={handleAuth} disabled={loading}>
-              {loading ? <ActivityIndicator color="#f2f2f2" /> : <Text style={styles.btnText}>{isLogin ? 'Giriş Yap' : 'Kayıt Ol'}</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={{ marginTop: 20 }}>
-              <Text style={styles.toggleText}>{isLogin ? 'Hesabın yok mu? Kayıt Ol' : 'Zaten hesabın var mı? Giriş Yap'}</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </SafeAreaProvider>
+        <ScrollView contentContainerStyle={styles.loginContent} keyboardShouldPersistTaps="handled">
+          <Text style={styles.logo}>🤖 AI Talent Hub</Text>
+          <Text style={styles.subtitle}>{isLogin ? 'Yeteneklerle Buluş' : 'Yeni Profil Oluştur'}</Text>
+          <TextInput style={styles.input} placeholder="E-posta" placeholderTextColor="#adb5bd" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+          <TextInput style={styles.input} placeholder="Şifre" placeholderTextColor="#adb5bd" value={password} onChangeText={setPassword} secureTextEntry />
+          <TouchableOpacity style={styles.primaryBtn} onPress={handleAuth} disabled={loading}>
+            {loading ? <ActivityIndicator color="#f2f2f2" /> : <Text style={styles.btnText}>{isLogin ? 'Giriş Yap' : 'Kayıt Ol'}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsLogin(!isLogin)} style={{ marginTop: 20 }}>
+            <Text style={styles.toggleText}>{isLogin ? 'Hesabın yok mu? Kayıt Ol' : 'Zaten hesabın var mı? Giriş Yap'}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaProvider>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <StatusBar barStyle="light-content" backgroundColor="#222831" />
-      <SafeAreaView style={styles.container}>
-        {/* Ortak Header */}
-        <View style={styles.header}>
+      
+      {/* Ortak Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
           {currentScreen === 'home' ? (
-            <TouchableOpacity style={styles.logoutBtn} onPress={() => { if(chatInterval.current) clearInterval(chatInterval.current); setUser(null); }}>
+            <TouchableOpacity style={styles.logoutBtn} onPress={() => { setUser(null); }}>
               <Text style={styles.logoutText}>Çıkış</Text>
             </TouchableOpacity>
           ) : (
@@ -195,15 +224,20 @@ export default function App() {
               <Text style={styles.logoutText}>← Geri</Text>
             </TouchableOpacity>
           )}
-          
+        </View>
+        
+        <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{currentScreen === 'chat_room' ? chatPartner?.name : 'AI Talent Hub'}</Text>
-          
-          {currentScreen === 'home' ? (
+        </View>
+        
+        <View style={styles.headerRight}>
+          {currentScreen === 'home' && (
             <TouchableOpacity onPress={openChatList} style={styles.msgIconTop}>
               <Text style={{ fontSize: 20 }}>💬</Text>
             </TouchableOpacity>
-          ) : <View style={{ width: 40 }} />}
+          )}
         </View>
+      </View>
 
         {/* ANA EKRAN (HR veya ADAY) */}
         {currentScreen === 'home' && (
@@ -268,19 +302,23 @@ export default function App() {
             ) : (
               <FlatList
                 data={activeChats}
-                keyExtractor={(item) => String(item.id)}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.candCard} onPress={() => openChatRoom(String(item.id), item.full_name)}>
-                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                      <View style={styles.avatar}><Text style={styles.avatarText}>{item.full_name[0]}</Text></View>
-                      <View>
-                        <Text style={styles.candName}>{item.full_name}</Text>
-                        <Text style={styles.candDetails}>{item.role === 'hr' ? 'İK Uzmanı' : 'Aday'}</Text>
+                keyExtractor={(item, index) => String(item.user_id || item.id || index)}
+                renderItem={({ item }) => {
+                  const displayName = item.name || item.full_name || 'Bilinmeyen';
+                  const partnerId = String(item.user_id || item.id);
+                  return (
+                    <TouchableOpacity style={styles.candCard} onPress={() => openChatRoom(partnerId, displayName)}>
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View style={styles.avatar}><Text style={styles.avatarText}>{displayName[0]}</Text></View>
+                        <View>
+                          <Text style={styles.candName}>{displayName}</Text>
+                          <Text style={styles.candDetails}>{item.role === 'hr' ? 'İK Uzmanı' : 'Aday'}</Text>
+                        </View>
                       </View>
-                    </View>
-                    <Text style={{fontSize: 18}}>💬</Text>
-                  </TouchableOpacity>
-                )}
+                      <Text style={{fontSize: 18}}>💬</Text>
+                    </TouchableOpacity>
+                  );
+                }}
               />
             )}
           </View>
@@ -316,15 +354,17 @@ export default function App() {
             </View>
           </KeyboardAvoidingView>
         )}
-      </SafeAreaView>
-    </SafeAreaProvider>
+    </View>
   );
 }
 
 // ─── STILLER ─────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: '#222831' },
-  header:       { height: 70, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#393e46', backgroundColor: '#222831' },
+  header:       { height: 70, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#393e46', backgroundColor: '#222831' },
+  headerLeft:   { flex: 1, alignItems: 'flex-start', justifyContent: 'center' },
+  headerCenter: { flex: 2, alignItems: 'center', justifyContent: 'center' },
+  headerRight:  { flex: 1, alignItems: 'flex-end', justifyContent: 'center' },
   headerTitle:  { color: '#f2f2f2', fontSize: 18, fontWeight: 'bold' },
   logoutBtn:    { backgroundColor: 'rgba(242,242,242,0.1)', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   logoutText:   { color: '#f2f2f2', fontWeight: '600', fontSize: 13 },
