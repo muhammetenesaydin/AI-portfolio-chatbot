@@ -1,52 +1,47 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, distinct
-from database import get_db
-from models.db_models import Message, User
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from datetime import datetime
+from database import messages_col, users_col
+from models.mongo_models import new_message, serialize_doc, serialize_list
+from bson import ObjectId
 
 router = APIRouter(prefix="/api/messages", tags=["Messages"])
 
 class MessageSend(BaseModel):
-    sender_id: int
-    receiver_id: int
+    sender_id: str
+    receiver_id: str
     content: str
 
-@router.get("/history/{user_id}/{other_id}")
-def get_history(user_id: int, other_id: int, db: Session = Depends(get_db)):
-    messages = db.query(Message).filter(
-        or_(
-            and_(Message.sender_id == user_id, Message.receiver_id == other_id),
-            and_(Message.sender_id == other_id, Message.receiver_id == user_id)
-        )
-    ).order_by(Message.id.asc()).all()
-    return messages
-
 @router.post("/send")
-def send_message(msg: MessageSend, db: Session = Depends(get_db)):
-    new_msg = Message(
-        sender_id=msg.sender_id,
-        receiver_id=msg.receiver_id,
-        content=msg.content,
-        created_at=datetime.now().strftime("%H:%M")
-    )
-    db.add(new_msg)
-    db.commit()
-    db.refresh(new_msg)
-    return new_msg
+def send_message(msg: MessageSend):
+    """Mesaj gönderir ve veritabanına kaydeder."""
+    doc = new_message(msg.sender_id, msg.receiver_id, msg.content)
+    result = messages_col.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return serialize_doc(doc)
+
+@router.get("/history/{user_id}/{other_id}")
+def get_history(user_id: str, other_id: str):
+    """İki kullanıcı arasındaki mesajlaşma geçmişini getirir."""
+    msgs = list(messages_col.find({
+        "$or": [
+            {"sender_id": user_id, "receiver_id": other_id},
+            {"sender_id": other_id, "receiver_id": user_id}
+        ]
+    }).sort("created_at", 1))
+    return serialize_list(msgs)
 
 @router.get("/active-chats/{user_id}")
-def get_active_chats(user_id: int, db: Session = Depends(get_db)):
-    # Kullanıcının mesajlaştığı benzersiz kişilerin ID'lerini bul
-    sent_to = db.query(Message.receiver_id).filter(Message.sender_id == user_id)
-    received_from = db.query(Message.sender_id).filter(Message.receiver_id == user_id)
+def get_active_chats(user_id: str):
+    """Kullanıcının aktif sohbet listesini (konuştuğu kişileri) getirir."""
+    sent = messages_col.distinct("receiver_id", {"sender_id": user_id})
+    received = messages_col.distinct("sender_id", {"receiver_id": user_id})
     
-    partner_ids = sent_to.union(received_from).all()
-    ids = [p[0] for p in partner_ids if p[0] != user_id]
+    partner_ids = list(set(sent + received) - {user_id})
     
-    # Bu ID'lere sahip kullanıcı bilgilerini getir
-    users = db.query(User).filter(User.id.in_(ids)).all()
-    return users
-
-from sqlalchemy import and_ # Eksik import eklendi
+    partners = []
+    for pid in partner_ids:
+        user = users_col.find_one({"_id": ObjectId(pid)}) if ObjectId.is_valid(pid) else None
+        if user:
+            partners.append(serialize_doc(user))
+    
+    return partners

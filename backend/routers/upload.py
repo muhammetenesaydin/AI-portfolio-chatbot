@@ -1,10 +1,9 @@
-from fastapi import APIRouter, UploadFile, File, Depends, Header
-from sqlalchemy.orm import Session
-from database import get_db
-from models.db_models import Candidate
-from services.cv_parser import extract_candidate_data
-from services.rag_engine import index_candidate_cv
-from services.quiz_engine import generate_quiz
+from fastapi import APIRouter, UploadFile, File, Header, HTTPException
+from database import candidates_col
+from models.mongo_models import new_candidate, serialize_doc
+from services.cv_parser import extract_candidate_data, parse_file_text
+from services.rag_engine import rag_engine
+from services.quiz_engine import quiz_engine
 import os
 import shutil
 import uuid
@@ -16,61 +15,74 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.post("/")
 async def upload_cv(
-    file: UploadFile = File(...), 
-    db: Session = Depends(get_db),
-    user_id: str = Header(None) # Frontend'den gelen user_id
+    file: UploadFile = File(...),
+    user_id: str = Header(None)
 ):
     if not user_id:
-        # Geçici çözüm: Eğer header yoksa (eski frontend), ID 1 varsay (Test için)
-        user_id = 1
+        raise HTTPException(status_code=401, detail="user-id header zorunludur.")
+
+    # 1. Dosyayı kaydet
+    file_ext = file.filename.split(".")[-1].lower()
+    if file_ext not in ["pdf", "docx", "doc"]:
+        raise HTTPException(status_code=400, detail="Sadece PDF ve DOCX destekleniyor.")
     
-    user_id = int(user_id)
-    file_ext = file.filename.split(".")[-1]
     file_name = f"{uuid.uuid4()}.{file_ext}"
     file_path = os.path.join(UPLOAD_DIR, file_name)
-
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # 1. CV Analizi
+    print(f"LOG: Dosya kaydedildi → {file_path}")
+
+    # 2. CV'yi analiz et (AI-free Regex tabanlı)
     candidate_data = extract_candidate_data(file_path)
-    
-    # 2. PROFİL KONTROLÜ (GÜNCELLEME VEYA OLUŞTURMA)
-    existing_candidate = db.query(Candidate).filter(Candidate.user_id == user_id).first()
-    
-    if existing_candidate:
-        print(f"LOG: Mevcut aday profili (ID: {existing_candidate.id}) güncelleniyor...")
-        existing_candidate.name = candidate_data.get("name", existing_candidate.name)
-        existing_candidate.experience_years = candidate_data.get("experience_years", 0)
-        existing_candidate.skills = candidate_data.get("skills", [])
-        existing_candidate.summary = candidate_data.get("summary", "")
-        # Yeni CV yüklendiği için puanı sıfırlayalım ki yeni sınava girsin
-        existing_candidate.quiz_score = 0 
-        target_candidate = existing_candidate
+    raw_text = parse_file_text(file_path)
+
+    print(f"LOG: CV Analizi → {candidate_data.get('name')}")
+
+    # 3. UPSERT: Mevcut profili güncelle veya yeni oluştur
+    existing = candidates_col.find_one({"user_id": user_id})
+
+    update_fields = {
+        "name": candidate_data.get("name", "Bilinmeyen Aday"),
+        "experience_years": candidate_data.get("experience_years", 0),
+        "skills": candidate_data.get("skills", []),
+        "summary": candidate_data.get("summary", ""),
+        "quiz_score": 0,
+        "trust_score": 0,
+        "cv_indexed": False
+    }
+
+    if existing:
+        print(f"LOG: Mevcut profil güncelleniyor (user_id: {user_id})")
+        candidates_col.update_one({"user_id": user_id}, {"$set": update_fields})
+        candidate_doc = candidates_col.find_one({"user_id": user_id})
     else:
-        print("LOG: Yeni aday profili oluşturuluyor...")
-        new_candidate = Candidate(
+        print(f"LOG: Yeni profil oluşturuluyor (user_id: {user_id})")
+        doc = new_candidate(
             user_id=user_id,
-            name=candidate_data.get("name", "Bilinmeyen Aday"),
-            experience_years=candidate_data.get("experience_years", 0),
-            skills=candidate_data.get("skills", []),
-            summary=candidate_data.get("summary", ""),
-            quiz_score=0
+            name=update_fields["name"],
+            experience_years=update_fields["experience_years"],
+            skills=update_fields["skills"],
+            summary=update_fields["summary"]
         )
-        db.add(new_candidate)
-        target_candidate = new_candidate
+        result = candidates_col.insert_one(doc)
+        candidate_doc = candidates_col.find_one({"_id": result.inserted_id})
 
-    db.commit()
-    db.refresh(target_candidate)
+    candidate_id = str(candidate_doc["_id"])
 
-    # 3. RAG / Atlas İndeksleme (Eskilerin üzerine yazar veya yeni ekler)
-    index_candidate_cv(target_candidate.id, file_path)
+    # 4. RAG Indexleme (MongoDB Atlas Vector Search)
+    try:
+        rag_engine.index_cv(candidate_id, raw_text)
+        candidates_col.update_one({"_id": candidate_doc["_id"]}, {"$set": {"cv_indexed": True}})
+        print(f"LOG: CV Atlas'a indekslendi (candidate_id: {candidate_id})")
+    except Exception as e:
+        print(f"WARN: Atlas indexleme başarısız: {e}")
 
-    # 4. Quiz Üretme
-    quiz = generate_quiz(target_candidate.id, candidate_data.get("summary", ""))
+    # 5. Quiz üret
+    quiz = await quiz_engine.generate_quiz(raw_text)
 
     return {
-        "message": "CV başarıyla işlendi",
-        "candidate_id": target_candidate.id,
+        "message": "CV başarıyla işlendi.",
+        "candidate_id": candidate_id,
         "quiz": quiz
     }
