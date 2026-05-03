@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Talent Hub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner"></div>
+        <div id="loadingText">İşlem Yapılıyor...</div>
+    </div>
+
+    <div id="loginScreen" class="landing-screen">
+        <div class="landing-content">
+            <h1 class="logo-large">🤖 AI Talent Hub</h1>
+            <div class="login-box">
+                <div class="auth-tabs">
+                    <button class="auth-tab active" id="tabLogin" onclick="toggleAuth('login')">Giriş Yap</button>
+                    <button class="auth-tab" id="tabRegister" onclick="toggleAuth('register')">Kayıt Ol</button>
+                </div>
+                <div id="authFields">
+                    <input type="email" id="emailInput" placeholder="E-posta" class="form-input">
+                    <input type="password" id="passwordInput" placeholder="Şifre" class="form-input">
+                    <div id="registerOnlyFields" style="display: none;">
+                        <input type="text" id="fullNameInput" placeholder="Ad Soyad" class="form-input">
+                        <div class="role-toggle">
+                            <label><input type="radio" name="authRole" value="candidate" checked> Aday</label>
+                            <label><input type="radio" name="authRole" value="hr"> İşveren</label>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-block" id="authSubmitBtn">Giriş Yap</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <header id="globalNavbar" class="global-navbar" style="display: none;">
+        <div class="nav-left">
+            <div class="logo-small" onclick="location.reload()">🤖 AI Talent Hub</div>
+            <div id="navRoleBadge" class="nav-role-badge">Panel</div>
+        </div>
+        <div class="nav-right">
+            <div class="nav-user-info"><span id="navUserName">Kullanıcı</span></div>
+            <button class="btn btn-outline btn-sm" onclick="logout()">Çıkış Yap</button>
+        </div>
+    </header>
+
+    <!-- DEVELOPER / ADAY DASHBOARD -->
+    <div id="developerDashboard" class="dashboard-view" style="display: none; padding-top: 100px;">
+        <aside class="sidebar">
+            <nav class="nav-menu">
+                <a href="javascript:void(0)" id="devMenuQuiz" class="nav-item active" onclick="switchDevTab('quiz')">📝 Sınavlarım</a>
+                <a href="javascript:void(0)" id="devMenuMessages" class="nav-item" onclick="switchDevTab('messages')">
+                    💬 Mesajlar <span id="devMsgBadge" style="display:none; background:#f96d00; color:#fff; font-size:0.65rem; padding:2px 7px; border-radius:20px; margin-left:6px;">●</span>
+                </a>
+            </nav>
+        </aside>
+        <main class="main-content">
+            <!-- Sınav Sekmesi -->
+            <div id="devQuizView">
+                <div class="section-title" style="margin-bottom: 24px;">
+                    <h1>Hoş Geldin, <span id="devWelcomeName">Aday</span></h1>
+                    <p style="color: var(--text-muted); margin-top: 4px;">Platforma CV'ni yükle ve AI destekli beceri doğrulamasına katıl.</p>
+                </div>
+                
+                <div class="candidate-grid-layout">
+                    <!-- CV Upload Card -->
+                    <div class="candidate-card upload-card">
+                        <h3 style="margin-bottom: 10px;">Yeni Sınav Başlat</h3>
+                        <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">AI destekli teknik bir test oluşturmak için güncel CV'ni PDF veya DOCX formatında yükle.</p>
+                        <div class="upload-zone" id="uploadBtn">
+                            <div class="upload-icon" style="font-size: 2.2rem; margin-bottom: 10px;">📄</div>
+                            <span style="font-weight: 600;">CV Seç ve Yükle</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Score Card -->
+                    <div class="score-card-section">
+                        <h3 style="margin-bottom: 15px;">Sınav Geçmişim</h3>
+                        <div id="myQuizHistory" class="candidates-grid" style="grid-template-columns: 1fr; gap: 15px;">
+                            <!-- JS will populate -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Mesajlar Sekmesi (Aday) -->
+            <div id="devMessagesView" style="display: none;">
+                <div class="section-title"><h2>Mesajlarım</h2></div>
+                <div id="devChatsList" style="margin-top: 30px;"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- İK DASHBOARD -->
+    <div id="hrDashboard" class="dashboard-view" style="display: none; padding-top: 100px;">
+        <aside class="sidebar">
+            <nav class="nav-menu">
+                <a href="javascript:void(0)" id="menuCandidates" class="nav-item active" onclick="switchTab('candidates')">👥 Adaylar</a>
+                <a href="javascript:void(0)" id="menuMessages" class="nav-item" onclick="switchTab('messages')">💬 Mesajlar</a>
+            </nav>
+        </aside>
+        <main class="main-content">
+            <div id="candidatesView">
+                <div class="candidates-grid" id="candidatesGrid"></div>
+            </div>
+            <div id="messagesView" style="display: none;">
+                <div class="section-title"><h2>Son Mesajlaşmalar</h2></div>
+                <div id="recentChatsList" style="margin-top: 30px;"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODALLAR -->
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="chat-title"><span id="chatCandidateName">Aday</span> AI Mülakat</div>
+                <button class="close-btn" onclick="closeAllModals()">&times;</button>
+            </div>
+            <div class="chat-messages" id="chatMessages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="Soru sor...">
+                <button id="sendMsgBtn" class="btn btn-primary btn-glow">Sorgula</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="messageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="chat-title"><span id="msgCandidateName">Aday</span> Sohbet</div>
+                <button class="close-btn" onclick="closeAllModals()">&times;</button>
+            </div>
+            <div class="chat-messages" id="directMessages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="directMsgInput" placeholder="Mesajınız...">
+                <button id="sendDirectMsgBtn" class="btn btn-primary">Gönder</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="quizModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <div class="chat-title">🧠 AI Teknik Sınav</div>
+                <button class="close-btn" onclick="closeAllModals()">&times;</button>
+            </div>
+            <div class="quiz-body" id="quizBody"></div>
+            <div class="quiz-footer" id="quizFooter" style="display:none;">
+                <button class="btn btn-primary" id="submitQuizBtn" style="width:100%; padding:16px; font-size:1rem;">✅ Sınavı Tamamla</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>
